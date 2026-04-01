@@ -3,435 +3,1017 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Brooklyn · Street Map</title>
+<title>Brooklyn · Block Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Gun.js: peer-to-peer real-time database — zero backend required -->
+<script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --font:'DM Sans',system-ui,sans-serif;
-  --mono:'DM Mono',monospace;
-  --bg:#f7f6f2;--white:#ffffff;--surf:#efece6;--surf2:#e7e3da;
-  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.16);
-  --text:#1a1a1a;--muted:#888;--hint:#bbb;
-  --oliver:#16a34a;--weston:#2563eb;--dominick:#9333ea;
-  --alex:#dc2626;--shared:#ea580c;--eraser:#be185d;
+
+:root {
+  --font : 'DM Sans', system-ui, sans-serif;
+  --mono : 'DM Mono', monospace;
+  --bg   : #f5f3ef;
+  --white: #ffffff;
+  --surf : #edeae4;
+  --surf2: #e4e0d8;
+  --bd   : rgba(0,0,0,0.08);
+  --bd2  : rgba(0,0,0,0.15);
+  --text : #1a1a1a;
+  --muted: #888;
+  --hint : #bbb;
+
+  --c-oliver  : #16a34a;
+  --c-weston  : #1d4ed8;
+  --c-dominick: #7c3aed;
+  --c-alex    : #dc2626;
+  --c-shared  : #d97706;
+  --c-eraser  : #be185d;
 }
-html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--bg);color:var(--text)}
-#app{display:flex;flex-direction:column;height:100vh}
-#shell{flex:1;display:flex;overflow:hidden}
-header{flex-shrink:0;height:52px;background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:12px;z-index:10}
-header h1{font-size:17px;font-weight:600;letter-spacing:-0.025em}
-header .sep{width:3px;height:3px;border-radius:50%;background:var(--hint)}
-header .sub{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
-#sidebar{width:212px;flex-shrink:0;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
-.pnl{padding:12px 11px;border-bottom:1px solid var(--border);flex-shrink:0}
-.plbl{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.17em;color:var(--hint);margin-bottom:8px}
-.flex-1{flex:1}
-.tb{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;margin-bottom:2px;border-radius:8px;border:1.5px solid transparent;cursor:pointer;background:transparent;font-family:var(--font);font-size:13px;font-weight:500;color:var(--text);text-align:left;transition:background .12s,border-color .12s,box-shadow .12s;user-select:none}
-.tb:hover{background:var(--surf)}
-.tb.on{background:var(--surf);border-color:var(--tc);box-shadow:0 0 0 1px var(--tc)}
-.pip{width:10px;height:10px;border-radius:50%;background:var(--tc);flex-shrink:0;transition:transform .15s}
-.tb.on .pip{transform:scale(1.3)}
-.tb-name{flex:1}
-.tb-cnt{font-family:var(--mono);font-size:11px;color:var(--muted)}
-.era .pip{background:transparent;border:1.5px solid var(--tc);border-radius:2px}
-.tdiv{height:1px;background:var(--border);margin:5px 0}
-.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-.sc{background:var(--surf);border-radius:7px;padding:7px 8px;text-align:center}
-.sc .n{font-size:18px;font-weight:600;line-height:1}
-.sc .l{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-top:3px}
-.lr{display:flex;align-items:center;gap:8px;padding:3px 1px}
-.lsw{width:9px;height:9px;border-radius:2px;flex-shrink:0}
-.llbl{font-size:12px;color:var(--muted)}
-.subway-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
-.badge{padding:3px 7px;border-radius:5px;font-family:var(--mono);font-size:10px;font-weight:500;line-height:1.3;color:#fff}
-.badge.dk{color:#1a1a1a}
-.bot{padding:10px 11px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
-.sync-row{display:flex;align-items:center;gap:7px}
-.sdot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;transition:background .3s}
-.sdot.saving{background:#f97316;animation:blink .45s ease infinite alternate}
-@keyframes blink{to{opacity:.2}}
-.slbl{font-family:var(--mono);font-size:10px;color:var(--muted)}
-.rbtn{width:100%;padding:7px;background:none;border:1px solid var(--border2);border-radius:7px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--muted);cursor:pointer;transition:all .12s}
-.rbtn:hover{background:var(--surf);color:var(--text)}
-#mapwrap{flex:1;position:relative;overflow:hidden}
-#map{width:100%;height:100%}
-.leaflet-control-zoom,.leaflet-control-attribution{display:none !important}
-.pill{position:absolute;top:11px;right:11px;z-index:500;background:rgba(255,255,255,.93);border:1px solid var(--border2);border-radius:20px;padding:5px 13px;font-family:var(--mono);font-size:11px;color:var(--muted);pointer-events:none}
-.pill strong{color:var(--text);font-weight:500}
-.zctrls{position:absolute;bottom:18px;right:11px;z-index:500;display:flex;flex-direction:column;gap:3px}
-.zbtn{width:32px;height:32px;background:rgba(255,255,255,.93);border:1px solid var(--border2);border-radius:7px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .1s}
-.zbtn:hover{background:#fff}
-#tt{position:absolute;z-index:600;background:rgba(255,255,255,.97);border:1px solid var(--border2);border-radius:9px;padding:6px 11px;pointer-events:none;font-size:12px;white-space:nowrap;opacity:0;transition:opacity .1s}
-#tt.on{opacity:1}
-#tt .tn{font-weight:600;color:var(--text)}
-#tt .ts{font-family:var(--mono);font-size:10px;margin-top:2px}
-#ld{position:absolute;inset:0;z-index:1000;background:var(--white);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s}
-.spin{width:24px;height:24px;border:2.5px solid var(--surf2);border-top-color:var(--muted);border-radius:50%;animation:spin .65s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.ld-txt{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center}
-.ld-prog{font-family:var(--mono);font-size:11px;color:var(--hint);margin-top:2px}
-#hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:500;background:rgba(255,255,255,.93);border:1px solid var(--border2);border-radius:20px;padding:5px 16px;font-size:11px;color:var(--muted);pointer-events:none;white-space:nowrap;transition:opacity .6s}
-.era-cur #map,.era-cur .leaflet-interactive{cursor:crosshair !important}
-@media(max-width:680px){
-  #shell{flex-direction:column-reverse}
-  #sidebar{width:100%;flex-direction:row;overflow-x:auto;overflow-y:hidden;border-right:none;border-top:1px solid var(--border);max-height:86px}
-  .pnl{border-bottom:none;border-right:1px solid var(--border);flex-shrink:0}
-  .pnl.stats,.pnl.legend,.flex-1,.bot{display:none}
-  .plbl{display:none}
-  .tb{margin-bottom:0}
+
+html,body { height:100%; overflow:hidden; font-family:var(--font); background:var(--bg); color:var(--text); }
+
+/* ── Layout ─────────────────────────────────────── */
+#app   { display:flex; flex-direction:column; height:100vh; }
+#shell { flex:1; display:flex; overflow:hidden; }
+
+/* ── Header ──────────────────────────────────────── */
+header {
+  flex-shrink:0; height:50px;
+  background:var(--white); border-bottom:1px solid var(--bd);
+  display:flex; align-items:center; padding:0 16px; gap:10px;
+}
+header h1  { font-size:16px; font-weight:600; letter-spacing:-.025em; }
+header .sp { width:3px; height:3px; border-radius:50%; background:var(--hint); }
+header .sub { font-family:var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.15em; color:var(--muted); }
+
+/* ── Sidebar ──────────────────────────────────────── */
+#sb {
+  width:206px; flex-shrink:0;
+  background:var(--white); border-right:1px solid var(--bd);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.pn { padding:11px 10px; border-bottom:1px solid var(--bd); flex-shrink:0; }
+.pl { font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.16em; color:var(--hint); margin-bottom:7px; }
+.f1 { flex:1; }
+
+/* ── Tool buttons ─────────────────────────────────── */
+.tb {
+  display:flex; align-items:center; gap:8px;
+  width:100%; padding:6px 8px; margin-bottom:2px;
+  border-radius:7px; border:1.5px solid transparent;
+  cursor:pointer; background:transparent;
+  font-family:var(--font); font-size:13px; font-weight:500; color:var(--text);
+  text-align:left; transition:background .12s, border-color .12s, box-shadow .12s;
+  user-select:none;
+}
+.tb:hover { background:var(--surf); }
+.tb.on    { background:var(--surf); border-color:var(--tc); box-shadow:0 0 0 1px var(--tc); }
+.pip      { width:10px; height:10px; border-radius:50%; background:var(--tc); flex-shrink:0; transition:transform .14s; }
+.tb.on .pip { transform:scale(1.3); }
+.tb-n  { flex:1; }
+.tb-c  { font-family:var(--mono); font-size:11px; color:var(--muted); }
+.era .pip { background:transparent; border:1.5px solid var(--tc); border-radius:2px; }
+.div  { height:1px; background:var(--bd); margin:5px 0; }
+
+/* ── Stats ────────────────────────────────────────── */
+.sg { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.sc { background:var(--surf); border-radius:6px; padding:6px 7px; text-align:center; }
+.sc .n { font-size:17px; font-weight:600; line-height:1; }
+.sc .l { font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-top:2px; }
+
+/* ── Legend ────────────────────────────────────────── */
+.lr   { display:flex; align-items:center; gap:7px; padding:2px 0; }
+.lsw  { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+.llb  { font-size:11.5px; color:var(--muted); }
+
+/* Subway pills */
+.swrp { display:flex; flex-wrap:wrap; gap:3px; margin-top:5px; }
+.spill {
+  padding:2px 6px; border-radius:4px;
+  font-family:var(--mono); font-size:9.5px; font-weight:600;
+  color:#fff; line-height:1.4;
+}
+.spill.yk { color:#1a1a1a; }
+
+/* ── Bottom bar ───────────────────────────────────── */
+.bot { padding:9px 10px; border-top:1px solid var(--bd); display:flex; flex-direction:column; gap:5px; }
+.sr  { display:flex; align-items:center; gap:6px; }
+.sd  { width:7px; height:7px; border-radius:50%; background:#22c55e; flex-shrink:0; transition:background .3s; }
+.sd.saving { background:#f97316; animation:sdpulse .4s ease infinite alternate; }
+.sd.off    { background:#94a3b8; }
+@keyframes sdpulse { to { opacity:.2; } }
+.sl  { font-family:var(--mono); font-size:10px; color:var(--muted); flex:1; }
+.rb  { width:100%; padding:7px; background:none; border:1px solid var(--bd2); border-radius:7px; font-family:var(--mono); font-size:11px; letter-spacing:.06em; color:var(--muted); cursor:pointer; transition:all .12s; }
+.rb:hover { background:var(--surf); color:var(--text); }
+
+/* ── Map ──────────────────────────────────────────── */
+#mw { flex:1; position:relative; overflow:hidden; }
+#map { width:100%; height:100%; }
+.leaflet-control-zoom, .leaflet-control-attribution { display:none !important; }
+
+/* ── HUD overlays ─────────────────────────────────── */
+.pill {
+  position:absolute; top:11px; right:11px; z-index:500;
+  background:rgba(255,255,255,.93); border:1px solid var(--bd2);
+  border-radius:20px; padding:5px 13px;
+  font-family:var(--mono); font-size:11px; color:var(--muted);
+  pointer-events:none;
+}
+.pill strong { color:var(--text); font-weight:500; }
+
+.zc { position:absolute; bottom:16px; right:11px; z-index:500; display:flex; flex-direction:column; gap:3px; }
+.zb {
+  width:31px; height:31px;
+  background:rgba(255,255,255,.93); border:1px solid var(--bd2);
+  border-radius:7px; font-size:18px; color:var(--text); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .1s;
+}
+.zb:hover { background:#fff; }
+
+#tt {
+  position:absolute; z-index:600;
+  background:rgba(255,255,255,.97); border:1px solid var(--bd2);
+  border-radius:9px; padding:6px 11px;
+  pointer-events:none; font-size:12px; white-space:nowrap;
+  opacity:0; transition:opacity .1s;
+}
+#tt.on { opacity:1; }
+#tt .tn { font-weight:600; color:var(--text); }
+#tt .ts { font-family:var(--mono); font-size:10px; margin-top:2px; }
+
+/* Loading */
+#ld {
+  position:absolute; inset:0; z-index:2000;
+  background:var(--white); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:12px;
+  transition:opacity .5s;
+}
+.spin {
+  width:22px; height:22px;
+  border:2.5px solid var(--surf2); border-top-color:var(--muted);
+  border-radius:50%; animation:spin .7s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.lt  { font-family:var(--mono); font-size:12px; color:var(--muted); text-align:center; }
+.lp  { font-family:var(--mono); font-size:10px; color:var(--hint); margin-top:1px; }
+
+#hint {
+  position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+  z-index:500; background:rgba(255,255,255,.93); border:1px solid var(--bd2);
+  border-radius:20px; padding:5px 15px; font-size:11px; color:var(--muted);
+  pointer-events:none; white-space:nowrap; transition:opacity .6s;
+}
+
+/* Subway label div icons */
+.sw-lbl {
+  background:transparent;
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  padding:2px 5px; border-radius:4px; white-space:nowrap;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+  pointer-events:none !important; user-select:none;
+}
+
+/* Eraser cursor */
+.era-cur #map, .era-cur .leaflet-interactive { cursor:crosshair !important; }
+
+/* Mobile */
+@media(max-width:640px){
+  #shell { flex-direction:column-reverse; }
+  #sb { width:100%; flex-direction:row; overflow-x:auto; max-height:82px; border-right:none; border-top:1px solid var(--bd); }
+  .pn { border-bottom:none; border-right:1px solid var(--bd); flex-shrink:0; }
+  .pn.stats,.pn.legend,.f1,.bot { display:none; }
+  .pl { display:none; }
+  .tb { margin-bottom:0; }
+  #mw { flex:1; min-height:0; }
 }
 </style>
 </head>
+
 <body>
 <div id="app">
   <header>
     <h1>Brooklyn</h1>
-    <div class="sep"></div>
-    <span class="sub">Street Map · Collaborative</span>
+    <div class="sp"></div>
+    <span class="sub">Block Map · Shared Live</span>
   </header>
+
   <div id="shell">
-    <aside id="sidebar">
-      <div class="pnl">
-        <div class="plbl">Paint as  (keys 1–4, E)</div>
-        <button class="tb on" data-t="oliver"   style="--tc:var(--oliver)">  <span class="pip"></span><span class="tb-name">Oliver</span>  <span class="tb-cnt" id="co">0</span></button>
-        <button class="tb"    data-t="weston"   style="--tc:var(--weston)">  <span class="pip"></span><span class="tb-name">Weston</span>  <span class="tb-cnt" id="cw">0</span></button>
-        <button class="tb"    data-t="dominick" style="--tc:var(--dominick)"><span class="pip"></span><span class="tb-name">Dominick</span><span class="tb-cnt" id="cd">0</span></button>
-        <button class="tb"    data-t="alex"     style="--tc:var(--alex)">    <span class="pip"></span><span class="tb-name">Alex</span>    <span class="tb-cnt" id="ca">0</span></button>
-        <div class="tdiv"></div>
-        <button class="tb era" data-t="eraser"  style="--tc:var(--eraser)">  <span class="pip"></span><span class="tb-name">Eraser</span></button>
+    <aside id="sb">
+
+      <!-- Friends / tools -->
+      <div class="pn">
+        <div class="pl">Paint as &nbsp;(keys 1–4, E)</div>
+        <button class="tb on" data-t="oliver"   style="--tc:var(--c-oliver)">  <span class="pip"></span><span class="tb-n">Oliver</span>  <span class="tb-c" id="co">0</span></button>
+        <button class="tb"    data-t="weston"   style="--tc:var(--c-weston)">  <span class="pip"></span><span class="tb-n">Weston</span>  <span class="tb-c" id="cw">0</span></button>
+        <button class="tb"    data-t="dominick" style="--tc:var(--c-dominick)"><span class="pip"></span><span class="tb-n">Dominick</span><span class="tb-c" id="cd">0</span></button>
+        <button class="tb"    data-t="alex"     style="--tc:var(--c-alex)">    <span class="pip"></span><span class="tb-n">Alex</span>    <span class="tb-c" id="ca">0</span></button>
+        <div class="div"></div>
+        <button class="tb era" data-t="eraser"  style="--tc:var(--c-eraser)">  <span class="pip"></span><span class="tb-n">Eraser</span></button>
       </div>
-      <div class="pnl stats">
-        <div class="plbl">Coverage</div>
-        <div class="sgrid">
-          <div class="sc"><div class="n" id="sp">0</div><div class="l">Painted</div></div>
-          <div class="sc"><div class="n" id="st">0</div><div class="l">Streets</div></div>
-          <div class="sc"><div class="n" id="ss">0</div><div class="l">Shared</div></div>
-          <div class="sc"><div class="n" id="spc">0%</div><div class="l">Done</div></div>
+
+      <!-- Stats -->
+      <div class="pn stats">
+        <div class="pl">Coverage</div>
+        <div class="sg">
+          <div class="sc"><div class="n" id="s-painted">0</div><div class="l">Painted</div></div>
+          <div class="sc"><div class="n" id="s-total">0</div><div class="l">Blocks</div></div>
+          <div class="sc"><div class="n" id="s-shared">0</div><div class="l">Shared</div></div>
+          <div class="sc"><div class="n" id="s-pct">0%</div><div class="l">Done</div></div>
         </div>
       </div>
-      <div class="pnl legend">
-        <div class="plbl">Friends</div>
-        <div class="lr"><div class="lsw" style="background:var(--oliver)"></div><span class="llbl">Oliver — green</span></div>
-        <div class="lr"><div class="lsw" style="background:var(--weston)"></div><span class="llbl">Weston — blue</span></div>
-        <div class="lr"><div class="lsw" style="background:var(--dominick)"></div><span class="llbl">Dominick — purple</span></div>
-        <div class="lr"><div class="lsw" style="background:var(--alex)"></div><span class="llbl">Alex — red</span></div>
-        <div class="lr"><div class="lsw" style="background:var(--shared)"></div><span class="llbl">Shared — orange</span></div>
-        <div class="tdiv"></div>
-        <div class="plbl">Subway</div>
-        <div class="subway-badges">
-          <span class="badge" style="background:#0039A6">A C E</span>
-          <span class="badge" style="background:#FF6319">B D F M</span>
-          <span class="badge dk" style="background:#FCCC0A">N Q R W</span>
-          <span class="badge" style="background:#EE352E">1 2 3</span>
-          <span class="badge" style="background:#00933C">4 5 6</span>
-          <span class="badge" style="background:#6CBE45">G</span>
-          <span class="badge" style="background:#996633">J Z</span>
-          <span class="badge" style="background:#A7A9AC">L</span>
+
+      <!-- Legend -->
+      <div class="pn legend">
+        <div class="pl">Friends</div>
+        <div class="lr"><div class="lsw" style="background:var(--c-oliver)"></div><span class="llb">Oliver — green</span></div>
+        <div class="lr"><div class="lsw" style="background:var(--c-weston)"></div><span class="llb">Weston — blue</span></div>
+        <div class="lr"><div class="lsw" style="background:var(--c-dominick)"></div><span class="llb">Dominick — purple</span></div>
+        <div class="lr"><div class="lsw" style="background:var(--c-alex)"></div><span class="llb">Alex — red</span></div>
+        <div class="lr"><div class="lsw" style="background:var(--c-shared)"></div><span class="llb">Shared — orange</span></div>
+        <div class="div"></div>
+        <div class="pl">Subway</div>
+        <div class="swrp">
+          <span class="spill" style="background:#0039A6">A C E</span>
+          <span class="spill" style="background:#FF6319">B D F M</span>
+          <span class="spill yk" style="background:#FCCC0A">N Q R W</span>
+          <span class="spill" style="background:#EE352E">1 2 3</span>
+          <span class="spill" style="background:#00933C">4 5 6</span>
+          <span class="spill" style="background:#6CBE45">G</span>
+          <span class="spill" style="background:#996633">J Z</span>
+          <span class="spill" style="background:#A7A9AC">L</span>
         </div>
       </div>
-      <div class="flex-1"></div>
+
+      <div class="f1"></div>
+
+      <!-- Bottom -->
       <div class="bot">
-        <div class="sync-row"><div class="sdot" id="sdot"></div><span class="slbl" id="slbl">Ready</span></div>
-        <button class="rbtn" id="resetBtn">↺ Clear all streets</button>
+        <div class="sr">
+          <div class="sd off" id="sd"></div>
+          <span class="sl" id="sl">Connecting…</span>
+        </div>
+        <button class="rb" id="resetBtn">↺ Clear all blocks</button>
       </div>
+
     </aside>
-    <div id="mapwrap">
+
+    <!-- Map -->
+    <div id="mw">
       <div id="map"></div>
+
       <div id="ld">
         <div class="spin"></div>
-        <div class="ld-txt"  id="ldtxt">Fetching Brooklyn streets…</div>
-        <div class="ld-prog" id="ldprog">First load takes 20–40 s</div>
+        <div class="lt" id="lt">Loading Brooklyn…</div>
+        <div class="lp" id="lp">First load: 20–40 s</div>
       </div>
+
       <div class="pill">Painting as: <strong id="aname">Oliver</strong></div>
       <div id="tt"><div class="tn" id="ttn"></div><div class="ts" id="tts"></div></div>
-      <div id="hint">Click a street to paint · Hold + drag to paint multiple · Keys 1–4 switch friends</div>
-      <div class="zctrls">
-        <button class="zbtn" id="zi">+</button>
-        <button class="zbtn" id="zo">−</button>
+      <div id="hint">Click a block to paint &nbsp;·&nbsp; Hold + drag to sweep &nbsp;·&nbsp; Keys 1–4 switch friends</div>
+
+      <div class="zc">
+        <button class="zb" id="zi">+</button>
+        <button class="zb" id="zo">−</button>
       </div>
     </div>
   </div>
 </div>
+
 <script>
 'use strict';
 
-const SK   = 'bk-streets-v2';
-const BBOX = '40.570,-74.045,40.740,-73.855';
-const OA   = 'https://overpass-api.de/api/interpreter';
+/* ═══════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════ */
+
+// Brooklyn bounding box: south,west,north,east (Overpass order)
+const BBOX     = '40.570,-74.045,40.740,-73.855';
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+
+// Gun.js room — all users who open this file share the same map.
+// Change this string to create a fresh empty map.
+const GUN_ROOM = 'brooklyn-block-map-v4';
 
 const FRIENDS = {
-  oliver  :{ color:'#16a34a', label:'Oliver · Green'    },
-  weston  :{ color:'#2563eb', label:'Weston · Blue'     },
-  dominick:{ color:'#9333ea', label:'Dominick · Purple'  },
-  alex    :{ color:'#dc2626', label:'Alex · Red'        },
-  shared  :{ color:'#ea580c', label:'Shared · Orange'   },
+  oliver  : { color:'#16a34a', label:'Oliver · Green'    },
+  weston  : { color:'#1d4ed8', label:'Weston · Blue'     },
+  dominick: { color:'#7c3aed', label:'Dominick · Purple'  },
+  alex    : { color:'#dc2626', label:'Alex · Red'        },
+  shared  : { color:'#d97706', label:'Shared · Orange'   },
 };
 
-const SUBWAY = {
-  A:'#0039A6',C:'#0039A6',E:'#0039A6',
-  B:'#FF6319',D:'#FF6319',F:'#FF6319',M:'#FF6319',
-  N:'#FCCC0A',Q:'#FCCC0A',R:'#FCCC0A',W:'#FCCC0A',
-  '1':'#EE352E','2':'#EE352E','3':'#EE352E',
-  '4':'#00933C','5':'#00933C','6':'#00933C',
-  '7':'#B933AD',G:'#6CBE45',J:'#996633',Z:'#996633',
-  L:'#A7A9AC',S:'#808183',
+const SUBWAY_COLORS = {
+  A:'#0039A6', C:'#0039A6', E:'#0039A6',
+  B:'#FF6319', D:'#FF6319', F:'#FF6319', M:'#FF6319',
+  N:'#FCCC0A', Q:'#FCCC0A', R:'#FCCC0A', W:'#FCCC0A',
+  '1':'#EE352E', '2':'#EE352E', '3':'#EE352E',
+  '4':'#00933C', '5':'#00933C', '6':'#00933C',
+  '7':'#B933AD', G:'#6CBE45',
+  J:'#996633', Z:'#996633',
+  L:'#A7A9AC', S:'#808183',
 };
 
-const W_GHOST=4, W_PAINT=5, W_HOVER=7, W_HIT=20;
+// Simplified fallback Brooklyn polygon (lat/lon) if OSM border fetch fails
+const BK_FALLBACK_RING = [
+  [40.739,-73.956],[40.730,-73.935],[40.718,-73.926],[40.700,-73.870],
+  [40.663,-73.870],[40.641,-73.878],[40.618,-73.880],[40.602,-73.894],
+  [40.576,-73.937],[40.573,-73.998],[40.576,-74.030],[40.598,-74.044],
+  [40.637,-74.030],[40.675,-74.020],[40.700,-74.020],[40.740,-73.987],
+];
 
-let tool='oliver', painted={}, wayLayers={}, totalWays=0;
-let isPainting=false, strokeSet=new Set(), saveTimer=null;
+/* ═══════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════ */
 
-const CR=L.canvas({padding:0.5});
-const map=L.map('map',{zoomControl:false,attributionControl:false,scrollWheelZoom:true,doubleClickZoom:true,minZoom:11,maxZoom:19});
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19}).addTo(map);
-map.fitBounds([[40.570,-74.045],[40.740,-73.855]],{padding:[14,14]});
+let activeTool  = 'oliver';
+let painted     = {};          // blockId → friend key | 'shared'
+let blockLayers = new Map();   // blockId → { hit: L.Polyline, vis: L.Polyline }
+let totalBlocks = 0;
+let isPainting  = false;
+let strokeSet   = new Set();
 
-const ttEl=document.getElementById('tt');
-const ttnEl=document.getElementById('ttn');
-const ttsEl=document.getElementById('tts');
-const mwEl=document.getElementById('mapwrap');
+// RAF batching for smooth remote updates
+let pendingRefresh  = new Set();
+let rafScheduled    = false;
 
-function showTT(ev,name,wid){
-  const owner=painted[wid];
-  const r=mwEl.getBoundingClientRect();
-  let x=ev.clientX-r.left+14,y=ev.clientY-r.top+14;
-  if(x+215>r.width)x-=225; if(y+54>r.height)y-=58;
-  ttEl.style.left=x+'px'; ttEl.style.top=y+'px';
-  ttnEl.textContent=name||'Unnamed street';
-  if(tool==='eraser'){
-    ttsEl.textContent=owner?'✕ Click or drag to erase':'Already clear';
-    ttsEl.style.color='#be185d';
+/* ═══════════════════════════════════════════════════════
+   MAP INIT
+═══════════════════════════════════════════════════════ */
+
+const CR = L.canvas({ padding: 0.6 });  // single shared canvas renderer
+
+const map = L.map('map', {
+  zoomControl       : false,
+  attributionControl: false,
+  scrollWheelZoom   : true,
+  doubleClickZoom   : true,
+  minZoom           : 12,
+  maxZoom           : 19,
+});
+
+// Restrict panning to Brooklyn only
+const BK_BOUNDS = L.latLngBounds([40.556, -74.058], [40.752, -73.842]);
+map.setMaxBounds(BK_BOUNDS);
+map.fitBounds([[40.570, -74.043], [40.740, -73.855]], { padding:[12,12] });
+
+// CartoDB Voyager — full street detail, labels, buildings
+L.tileLayer(
+  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  { subdomains:'abcd', maxZoom:19 }
+).addTo(map);
+
+/* ═══════════════════════════════════════════════════════
+   GUN.JS — REAL-TIME SHARED STATE
+   All friends see the same map in real time.
+   No backend, no account — purely peer-to-peer.
+═══════════════════════════════════════════════════════ */
+
+// Public Gun relay servers (zero setup required)
+const gun = Gun([
+  'https://relay.peer.ooo/gun',
+  'https://gun-manhattan.herokuapp.com/gun',
+]);
+const db = gun.get(GUN_ROOM);
+
+let gunConnected = false;
+let saveTimer    = null;
+
+function syncStatus(cls, txt) {
+  document.getElementById('sd').className = 'sd ' + cls;
+  document.getElementById('sl').textContent = txt;
+}
+
+// Listen for remote changes from any friend
+db.map().on((val, blockId) => {
+  // Gun fires this for all historical + new values
+  const validOwner = (val && typeof val === 'string' && (val in FRIENDS || val === 'shared'))
+    ? val : null;
+
+  const prev = painted[blockId];
+  if (validOwner !== prev) {
+    if (validOwner) painted[blockId] = validOwner;
+    else            delete painted[blockId];
+    scheduleRefresh(blockId);
+  }
+
+  if (!gunConnected) {
+    gunConnected = true;
+    syncStatus('', 'Live · Shared');
+  }
+});
+
+// Debounced save — write changed block to Gun + localStorage
+function saveBlock(blockId, owner) {
+  // Update Gun immediately (real-time for others)
+  db.get(blockId).put(owner || null);
+  // Also cache locally
+  try { localStorage.setItem('bk_' + blockId, owner || ''); } catch(e){}
+}
+
+/* ═══════════════════════════════════════════════════════
+   STYLE HELPERS
+═══════════════════════════════════════════════════════ */
+
+// Unpainted block: near-invisible, just shows street network
+const GHOST_STYLE = { color:'#94a3b8', weight:3, opacity:0.18, lineCap:'round', lineJoin:'round' };
+
+function styleFor(blockId, hovered) {
+  const owner = painted[blockId];
+  if (!owner) {
+    if (hovered && activeTool !== 'eraser') {
+      return { color: FRIENDS[activeTool]?.color || '#666', weight:5, opacity:0.4, lineCap:'round', lineJoin:'round' };
+    }
+    return GHOST_STYLE;
+  }
+  const c = FRIENDS[owner]?.color || FRIENDS.shared.color;
+  return { color:c, weight: hovered ? 7 : 5, opacity: hovered ? 1.0 : 0.82, lineCap:'round', lineJoin:'round' };
+}
+
+/* ═══════════════════════════════════════════════════════
+   RAF BATCH REFRESHER — smooth remote updates
+═══════════════════════════════════════════════════════ */
+
+function scheduleRefresh(blockId) {
+  pendingRefresh.add(blockId);
+  if (!rafScheduled) {
+    rafScheduled = true;
+    requestAnimationFrame(flushRefresh);
+  }
+}
+
+function flushRefresh() {
+  pendingRefresh.forEach(id => {
+    const lyr = blockLayers.get(id);
+    if (lyr) lyr.vis.setStyle(styleFor(id, false));
+  });
+  pendingRefresh.clear();
+  rafScheduled = false;
+  updateUI();
+}
+
+/* ═══════════════════════════════════════════════════════
+   BLOCK SPLITTING
+   Convert OSM ways into individual block segments.
+   A block = one street segment between two intersections.
+═══════════════════════════════════════════════════════ */
+
+function splitIntoBlocks(elements) {
+  // Separate ways from nodes
+  const ways  = [];
+  const nodeMap = new Map();   // nodeId → {lat, lon}
+
+  for (const el of elements) {
+    if (el.type === 'way')  ways.push(el);
+    if (el.type === 'node') nodeMap.set(el.id, { lat: el.lat, lon: el.lon });
+  }
+
+  // Count how many ways each node belongs to
+  // Nodes in 2+ ways are intersections → split points
+  const nodeDegree = new Map();
+  for (const way of ways) {
+    for (const nid of (way.nodes || [])) {
+      nodeDegree.set(nid, (nodeDegree.get(nid) || 0) + 1);
+    }
+  }
+
+  const blocks = [];
+
+  for (const way of ways) {
+    const nodes = way.nodes || [];
+    if (nodes.length < 2) continue;
+    const name = (way.tags && way.tags.name) || '';
+
+    let segStart = 0;
+
+    for (let i = 1; i < nodes.length; i++) {
+      const nid    = nodes[i];
+      const isLast = i === nodes.length - 1;
+      // Split if this node is an intersection OR the last node
+      const isJunction = (nodeDegree.get(nid) || 0) >= 2;
+
+      if (isJunction || isLast) {
+        // Build this block's coordinates
+        const segNodes = nodes.slice(segStart, i + 1);
+        const lls = [];
+        for (const sid of segNodes) {
+          const nd = nodeMap.get(sid);
+          if (nd) lls.push([nd.lat, nd.lon]);
+        }
+
+        if (lls.length >= 2) {
+          // Stable ID: wayId + start index
+          blocks.push({ id: `${way.id}_${segStart}`, name, lls });
+        }
+        segStart = i;
+      }
+    }
+  }
+
+  return blocks;
+}
+
+/* ═══════════════════════════════════════════════════════
+   STREET LAYER BUILDER
+   Two Leaflet polylines per block:
+     hit — wide, invisible, captures mouse events
+     vis — thin, visible, not interactive
+═══════════════════════════════════════════════════════ */
+
+function buildBlock(block) {
+  const { id, name, lls } = block;
+
+  // Restore from localStorage (instant, before Gun syncs)
+  try {
+    const cached = localStorage.getItem('bk_' + id);
+    if (cached && (cached in FRIENDS || cached === 'shared')) {
+      painted[id] = cached;
+    }
+  } catch(e) {}
+
+  // Wide invisible hit zone (20px) for easy clicking
+  const hit = L.polyline(lls, {
+    renderer          : CR,
+    weight            : 20,
+    opacity           : 0.001,
+    interactive       : true,
+    bubblingMouseEvents: false,
+  }).addTo(map);
+
+  // Thin visible line — not interactive so it doesn't interfere with hit zone
+  const vis = L.polyline(lls, {
+    renderer          : CR,
+    interactive       : false,
+    bubblingMouseEvents: false,
+    ...styleFor(id, false),
+  }).addTo(map);
+
+  /* ── Mouse / touch events ──────────────────── */
+
+  hit.on('mousedown', function(e) {
+    L.DomEvent.stopPropagation(e);
+    isPainting = true;
+    strokeSet  = new Set();
+    map.dragging.disable();
+    map.doubleClickZoom.disable();
+    applyTool(id, false);
+  });
+
+  hit.on('mouseover', function(e) {
+    vis.setStyle(styleFor(id, true));
+    showTooltip(e.originalEvent, name, id);
+    if (isPainting) applyTool(id, true);
+  });
+
+  hit.on('mousemove', function(e) {
+    showTooltip(e.originalEvent, name, id);
+    if (isPainting) applyTool(id, true);
+  });
+
+  hit.on('mouseout', function() {
+    vis.setStyle(styleFor(id, false));
+    hideTooltip();
+  });
+
+  blockLayers.set(id, { hit, vis });
+}
+
+/* ═══════════════════════════════════════════════════════
+   PAINT / ERASE ENGINE
+═══════════════════════════════════════════════════════ */
+
+function applyTool(blockId, isDrag) {
+  // Skip if already visited in this drag stroke
+  if (isPainting && isDrag && strokeSet.has(blockId)) return;
+  strokeSet.add(blockId);
+
+  const cur = painted[blockId];
+
+  if (activeTool === 'eraser') {
+    if (!cur) return;
+    delete painted[blockId];
+    saveBlock(blockId, null);
+
+  } else if (!isDrag) {
+    // Click: full toggle logic
+    if      (!cur)              painted[blockId] = activeTool;           // empty → paint
+    else if (cur === activeTool) delete painted[blockId];                  // own → clear
+    else if (cur === 'shared')   painted[blockId] = activeTool;           // shared → claim
+    else                         painted[blockId] = 'shared';             // collision → shared
+    saveBlock(blockId, painted[blockId] || null);
+
   } else {
-    ttsEl.textContent=owner?FRIENDS[owner].label:'+ Click or drag to paint';
-    ttsEl.style.color=owner?FRIENDS[owner].color:'#aaa';
+    // Drag: additive only (never removes)
+    if      (!cur)               painted[blockId] = activeTool;
+    else if (cur === activeTool || cur === 'shared') return;              // no change
+    else                         painted[blockId] = 'shared';             // collision
+    saveBlock(blockId, painted[blockId]);
+  }
+
+  // Immediate visual feedback
+  const lyr = blockLayers.get(blockId);
+  if (lyr) lyr.vis.setStyle(styleFor(blockId, true));
+  updateUI();
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOOLTIP
+═══════════════════════════════════════════════════════ */
+
+const ttEl  = document.getElementById('tt');
+const ttnEl = document.getElementById('ttn');
+const ttsEl = document.getElementById('tts');
+const mwEl  = document.getElementById('mw');
+
+function showTooltip(ev, name, blockId) {
+  const owner = painted[blockId];
+  const r = mwEl.getBoundingClientRect();
+  let x = ev.clientX - r.left + 14;
+  let y = ev.clientY - r.top  + 14;
+  if (x + 210 > r.width)  x -= 220;
+  if (y + 52  > r.height) y -= 56;
+  ttEl.style.left = x + 'px';
+  ttEl.style.top  = y + 'px';
+  ttnEl.textContent = name || 'Unnamed street';
+  if (activeTool === 'eraser') {
+    ttsEl.textContent = owner ? '✕ Erase' : 'Already clear';
+    ttsEl.style.color = '#be185d';
+  } else {
+    ttsEl.textContent = owner ? FRIENDS[owner].label : '+ Paint this block';
+    ttsEl.style.color = owner ? (FRIENDS[owner]?.color || '#888') : '#aaa';
   }
   ttEl.classList.add('on');
 }
-function hideTT(){ttEl.classList.remove('on');}
+function hideTooltip() { ttEl.classList.remove('on'); }
 
-function setSync(cls,txt){
-  document.getElementById('sdot').className='sdot '+cls;
-  document.getElementById('slbl').textContent=txt;
-}
-function scheduleSave(){
-  setSync('saving','Saving…');
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{
-    try{localStorage.setItem(SK,JSON.stringify(painted));setSync('','Saved');}
-    catch(e){setSync('','Save failed');}
-  },500);
-}
-function loadState(){
-  try{const r=localStorage.getItem(SK);if(r)painted=JSON.parse(r);}
-  catch(e){painted={};}
-}
+/* ═══════════════════════════════════════════════════════
+   SUBWAY LINES + LABELS — Brooklyn only, not clickable
+═══════════════════════════════════════════════════════ */
 
-function styleFor(wid,hovered){
-  const owner=painted[wid];
-  if(!owner){
-    if(hovered&&tool!=='eraser')
-      return{color:FRIENDS[tool]?.color||'#666',weight:W_HOVER,opacity:0.45};
-    return{color:'#94a3b8',weight:W_GHOST,opacity:0.22};
+function buildSubway(relations) {
+  // Track which way refs we've already drawn (some ways shared across relations)
+  const drawnWays = new Set();
+  // Track which route refs we've already labeled
+  const labeledRefs = new Set();
+
+  for (const rel of relations) {
+    if (!rel.tags || rel.tags.route !== 'subway') continue;
+
+    const ref   = (rel.tags.ref || '').trim();
+    const lines = ref.split(/[\s\/]+/).map(s => s.trim()).filter(Boolean);
+    const color = SUBWAY_COLORS[lines[0]] || '#555555';
+    const isDark = lines[0] === 'N' || lines[0] === 'Q' || lines[0] === 'R' || lines[0] === 'W';
+
+    // Collect geometry for labeling — only way members
+    const allLls = [];
+
+    for (const member of (rel.members || [])) {
+      if (member.type !== 'way' || !member.geometry || member.geometry.length < 2) continue;
+
+      const lls = member.geometry.map(p => [p.lat, p.lon]);
+
+      // Only draw within Brooklyn bbox to avoid showing Manhattan/Queens segments
+      // Filter: keep only points within Brooklyn bbox
+      if (!isInBkBbox(lls)) continue;
+
+      if (!drawnWays.has(member.ref)) {
+        drawnWays.add(member.ref);
+
+        // Subtle glow behind the line
+        L.polyline(lls, {
+          renderer : CR, color, weight:9, opacity:0.10,
+          lineCap:'round', lineJoin:'round',
+          interactive:false, bubblingMouseEvents:false,
+        }).addTo(map);
+
+        // Main subway stroke
+        L.polyline(lls, {
+          renderer : CR, color, weight:3.5, opacity:0.95,
+          lineCap:'round', lineJoin:'round',
+          interactive:false, bubblingMouseEvents:false,
+        }).addTo(map);
+      }
+
+      allLls.push(...lls);
+    }
+
+    // Place one label per unique route ref, at the midpoint of the route geometry
+    if (ref && !labeledRefs.has(ref) && allLls.length > 0) {
+      labeledRefs.add(ref);
+      const mid = allLls[Math.floor(allLls.length / 2)];
+      const textColor = isDark ? '#1a1a1a' : '#ffffff';
+
+      L.marker(mid, {
+        icon: L.divIcon({
+          className : 'sw-lbl',
+          html      : `<span style="background:${color};color:${textColor};padding:2px 6px;border-radius:4px;font-family:monospace;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3)">${ref}</span>`,
+          iconAnchor: [24, 10],
+          iconSize  : null,
+        }),
+        interactive: false,
+        keyboard   : false,
+      }).addTo(map);
+    }
   }
-  const c=FRIENDS[owner]?.color||FRIENDS.shared.color;
-  return{color:c,weight:hovered?W_HOVER:W_PAINT,opacity:hovered?1.0:0.82};
 }
 
-function applyTool(wid,isDrag){
-  if(isPainting&&isDrag&&strokeSet.has(wid))return;
-  strokeSet.add(wid);
-  const cur=painted[wid];
-  if(tool==='eraser'){
-    if(!cur)return;
-    delete painted[wid];
-  }else if(!isDrag){
-    if(!cur)               painted[wid]=tool;
-    else if(cur===tool)    delete painted[wid];
-    else if(cur==='shared')painted[wid]=tool;
-    else                   painted[wid]='shared';
-  }else{
-    if(!cur)               painted[wid]=tool;
-    else if(cur===tool||cur==='shared')return;
-    else                   painted[wid]='shared';
+// Returns true if at least some coordinates in lls are inside Brooklyn bbox
+function isInBkBbox(lls) {
+  const S=40.570, N=40.740, W=-74.045, E=-73.855;
+  return lls.some(([lat,lon]) => lat>=S && lat<=N && lon>=W && lon<=E);
+}
+
+/* ═══════════════════════════════════════════════════════
+   BROOKLYN BORDER + OUTSIDE MASK
+   Draws:
+     1. A thick border around Brooklyn
+     2. A semi-transparent mask over everything outside Brooklyn
+        so the map is visually focused on Brooklyn only
+═══════════════════════════════════════════════════════ */
+
+async function buildBorderAndMask() {
+  let ring = null;
+
+  // Fetch Brooklyn's boundary from OSM (relation 369518 = Kings County)
+  try {
+    const q   = '[out:json][timeout:25];relation(369518);out geom;';
+    const res = await oaFetch(q);
+    const rel = (res.elements || [])[0];
+    if (rel && rel.members) {
+      ring = assembleOuterRing(rel.members);
+    }
+  } catch(e) {
+    console.warn('Border fetch failed, using fallback polygon');
   }
-  const lyr=wayLayers[wid];
-  if(lyr)lyr.vis.setStyle(styleFor(wid,true));
-  scheduleSave(); updateUI();
+
+  if (!ring || ring.length < 3) ring = BK_FALLBACK_RING;
+
+  // 1. Outer mask — world minus Brooklyn hole
+  //    GeoJSON Polygon with hole: [ outerRing, brooklynHole ]
+  //    GeoJSON uses [lon, lat] order
+  const worldRing   = [[-90,-180],[-90,180],[90,180],[90,-180],[-90,-180]];
+  const brooklynHole = ring.map(([lat,lon]) => [lon, lat]);
+  brooklynHole.push(brooklynHole[0]); // close
+
+  L.geoJSON({
+    type:'Feature',
+    geometry:{
+      type:'Polygon',
+      coordinates:[ worldRing, brooklynHole ],
+    }
+  }, {
+    style:{
+      fillColor  : '#e8e4dc',
+      fillOpacity: 0.68,
+      color      : 'transparent',
+      weight     : 0,
+      interactive: false,
+    }
+  }).addTo(map);
+
+  // 2. Borough border line — crisp dark outline
+  const borderLls = ring.map(p => Array.isArray(p) ? p : [p.lat, p.lon]);
+  borderLls.push(borderLls[0]); // close ring
+
+  // Soft halo
+  L.polyline(borderLls, {
+    color:'#1e293b', weight:8, opacity:0.12,
+    lineCap:'round', lineJoin:'round', interactive:false,
+  }).addTo(map);
+
+  // Hard border
+  L.polyline(borderLls, {
+    color:'#1e293b', weight:2.5, opacity:0.7,
+    lineCap:'round', lineJoin:'round', interactive:false,
+  }).addTo(map);
 }
 
-function buildStreet(way){
-  if(!way.geometry||way.geometry.length<2)return;
-  const wid=way.id;
-  const name=(way.tags&&way.tags.name)||'';
-  const lls=way.geometry.map(p=>[p.lat,p.lon]);
+// Assemble outer ring of a Brooklyn OSM relation into an ordered [lat,lon] array
+function assembleOuterRing(members) {
+  const outers = members
+    .filter(m => m.type === 'way' && m.geometry && m.geometry.length >= 2
+                 && (!m.role || m.role === 'outer'))
+    .map(m => m.geometry.map(p => [p.lat, p.lon]));
 
-  const hit=L.polyline(lls,{renderer:CR,weight:W_HIT,opacity:0.001,interactive:true,bubblingMouseEvents:false}).addTo(map);
-  const vis=L.polyline(lls,{renderer:CR,lineCap:'round',lineJoin:'round',interactive:false,bubblingMouseEvents:false,...styleFor(wid,false)}).addTo(map);
+  if (!outers.length) return [];
 
-  hit.on('mousedown',function(e){
-    L.DomEvent.stopPropagation(e);
-    isPainting=true;strokeSet=new Set();
-    map.dragging.disable();map.doubleClickZoom.disable();
-    applyTool(wid,false);
+  const ring = [...outers[0]];
+  const used = new Set([0]);
+
+  const dist = (a, b) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]);
+  const TOLE = 0.0002;
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const tail = ring[ring.length - 1];
+    for (let i = 0; i < outers.length; i++) {
+      if (used.has(i)) continue;
+      const seg = outers[i];
+      if (dist(tail, seg[0]) < TOLE) {
+        ring.push(...seg.slice(1));
+        used.add(i); changed = true; break;
+      }
+      if (dist(tail, seg[seg.length-1]) < TOLE) {
+        ring.push(...seg.slice(0, -1).reverse());
+        used.add(i); changed = true; break;
+      }
+    }
+  }
+
+  return ring;
+}
+
+/* ═══════════════════════════════════════════════════════
+   OVERPASS FETCH
+═══════════════════════════════════════════════════════ */
+
+async function oaFetch(query) {
+  const res = await fetch(OVERPASS, {
+    method : 'POST',
+    body   : 'data=' + encodeURIComponent(query),
   });
-  hit.on('mouseover',function(e){
-    vis.setStyle(styleFor(wid,true));
-    showTT(e.originalEvent,name,wid);
-    if(isPainting)applyTool(wid,true);
-  });
-  hit.on('mousemove',function(e){
-    showTT(e.originalEvent,name,wid);
-    if(isPainting)applyTool(wid,true);
-  });
-  hit.on('mouseout',function(){
-    vis.setStyle(styleFor(wid,false));hideTT();
-  });
-  wayLayers[wid]={hit,vis};
+  if (!res.ok) throw new Error('Overpass HTTP ' + res.status);
+  return res.json();
 }
 
-function buildSubway(relations){
-  const done=new Set();
-  relations.forEach(rel=>{
-    const ref=(rel.tags&&rel.tags.ref)||'';
-    const lines=ref.split(/[\s,\/]+/).map(s=>s.trim()).filter(Boolean);
-    const color=SUBWAY[lines[0]]||'#555';
-    (rel.members||[]).forEach(m=>{
-      if(m.type!=='way'||!m.geometry||m.geometry.length<2||done.has(m.ref))return;
-      done.add(m.ref);
-      const lls=m.geometry.map(p=>[p.lat,p.lon]);
-      L.polyline(lls,{renderer:CR,color,weight:10,opacity:0.12,lineCap:'round',lineJoin:'round',interactive:false,bubblingMouseEvents:false}).addTo(map);
-      L.polyline(lls,{renderer:CR,color,weight:3.5,opacity:0.92,lineCap:'round',lineJoin:'round',interactive:false,bubblingMouseEvents:false}).addTo(map);
-    });
-  });
+/* ═══════════════════════════════════════════════════════
+   UI COUNTERS
+═══════════════════════════════════════════════════════ */
+
+function updateUI() {
+  const cnt = { oliver:0, weston:0, dominick:0, alex:0, shared:0 };
+  let painted_n = 0;
+  for (const owner of Object.values(painted)) {
+    if (owner in cnt) { cnt[owner]++; painted_n++; }
+  }
+  document.getElementById('co').textContent        = cnt.oliver;
+  document.getElementById('cw').textContent        = cnt.weston;
+  document.getElementById('cd').textContent        = cnt.dominick;
+  document.getElementById('ca').textContent        = cnt.alex;
+  document.getElementById('s-painted').textContent = painted_n;
+  document.getElementById('s-total').textContent   = totalBlocks;
+  document.getElementById('s-shared').textContent  = cnt.shared;
+  document.getElementById('s-pct').textContent     =
+    totalBlocks ? Math.round(painted_n / totalBlocks * 100) + '%' : '0%';
 }
 
-async function loadBorder(){
-  const q='[out:json][timeout:20];relation(369518);out geom;';
-  try{
-    const d=await oaFetch(q);
-    const rel=(d.elements||[])[0];
-    if(!rel||!rel.members)return;
-    rel.members.forEach(m=>{
-      if(m.type!=='way'||!m.geometry)return;
-      if(m.role&&m.role!=='outer')return;
-      const lls=m.geometry.map(p=>[p.lat,p.lon]);
-      L.polyline(lls,{color:'#1e293b',weight:7,opacity:0.10,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-      L.polyline(lls,{color:'#1e293b',weight:2.5,opacity:0.60,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-    });
-  }catch(e){console.warn('Border unavailable:',e.message);}
-}
+/* ═══════════════════════════════════════════════════════
+   GLOBAL INPUT HANDLERS
+═══════════════════════════════════════════════════════ */
 
-async function oaFetch(query){
-  const r=await fetch(OA,{method:'POST',body:'data='+encodeURIComponent(query)});
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  return r.json();
-}
-
-function updateUI(){
-  const cnt={oliver:0,weston:0,dominick:0,alex:0,shared:0};
-  let n=0;
-  Object.values(painted).forEach(o=>{if(o in cnt){cnt[o]++;n++;}});
-  document.getElementById('co').textContent=cnt.oliver;
-  document.getElementById('cw').textContent=cnt.weston;
-  document.getElementById('cd').textContent=cnt.dominick;
-  document.getElementById('ca').textContent=cnt.alex;
-  document.getElementById('sp').textContent=n;
-  document.getElementById('st').textContent=totalWays;
-  document.getElementById('ss').textContent=cnt.shared;
-  document.getElementById('spc').textContent=totalWays?Math.round(n/totalWays*100)+'%':'0%';
-}
-
-document.addEventListener('mouseup',()=>{
-  if(isPainting){
-    isPainting=false;strokeSet=new Set();
-    map.dragging.enable();map.doubleClickZoom.enable();
+// End paint stroke on mouse-up anywhere on the page
+document.addEventListener('mouseup', () => {
+  if (isPainting) {
+    isPainting = false;
+    strokeSet  = new Set();
+    map.dragging.enable();
+    map.doubleClickZoom.enable();
   }
 });
 
-document.addEventListener('keydown',e=>{
-  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
-  const map2={'1':'oliver','2':'weston','3':'dominick','4':'alex','e':'eraser','E':'eraser'};
-  const t=map2[e.key];
-  if(t){const b=document.querySelector('.tb[data-t="'+t+'"]');if(b)b.click();}
+// Keyboard shortcuts: 1–4 = friends, E = eraser
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const map2 = { '1':'oliver','2':'weston','3':'dominick','4':'alex','e':'eraser','E':'eraser' };
+  const t = map2[e.key];
+  if (t) { document.querySelector(`.tb[data-t="${t}"]`)?.click(); }
 });
 
-document.querySelectorAll('.tb').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    tool=btn.dataset.t;
-    document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('on',b===btn));
-    document.getElementById('aname').textContent=tool==='eraser'?'Eraser':tool.charAt(0).toUpperCase()+tool.slice(1);
-    document.getElementById('mapwrap').classList.toggle('era-cur',tool==='eraser');
+// Tool buttons
+document.querySelectorAll('.tb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTool = btn.dataset.t;
+    document.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b === btn));
+    document.getElementById('aname').textContent =
+      activeTool === 'eraser' ? 'Eraser'
+      : activeTool.charAt(0).toUpperCase() + activeTool.slice(1);
+    document.getElementById('mw').classList.toggle('era-cur', activeTool === 'eraser');
   });
 });
 
-document.getElementById('zi').addEventListener('click',()=>map.zoomIn());
-document.getElementById('zo').addEventListener('click',()=>map.zoomOut());
-document.getElementById('resetBtn').addEventListener('click',()=>{
-  if(!confirm('Clear all painted streets?'))return;
-  painted={};
-  Object.entries(wayLayers).forEach(([id,{vis}])=>vis.setStyle(styleFor(id,false)));
-  scheduleSave();updateUI();
+// Zoom
+document.getElementById('zi').addEventListener('click', () => map.zoomIn());
+document.getElementById('zo').addEventListener('click', () => map.zoomOut());
+
+// Reset
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('Clear ALL painted blocks for everyone?')) return;
+  // Clear locally
+  painted = {};
+  blockLayers.forEach((lyr, id) => lyr.vis.setStyle(styleFor(id, false)));
+  // Clear Gun.js
+  db.put(null);
+  // Clear localStorage
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('bk_'))
+      .forEach(k => localStorage.removeItem(k));
+  } catch(e) {}
+  updateUI();
 });
 
-const hintEl=document.getElementById('hint');
-setTimeout(()=>{hintEl.style.opacity='0';},4500);
-setTimeout(()=>{hintEl.style.display='none';},5200);
+// Hint fade
+const hintEl = document.getElementById('hint');
+setTimeout(() => { hintEl.style.opacity = '0'; }, 5000);
+setTimeout(() => { hintEl.style.display = 'none'; }, 5700);
 
-async function init(){
-  loadState();
-  const ldEl=document.getElementById('ld');
-  const ldTxt=document.getElementById('ldtxt');
-  const ldProg=document.getElementById('ldprog');
+/* ═══════════════════════════════════════════════════════
+   INIT — fetch data, build layers, show map
+═══════════════════════════════════════════════════════ */
 
-  const STREET_Q=`
-[out:json][timeout:120];
+async function init() {
+  const ldEl = document.getElementById('ld');
+  const ltEl = document.getElementById('lt');
+  const lpEl = document.getElementById('lp');
+
+  /*
+   * Fetch ALL named street ways in Brooklyn + their node geometry.
+   * `out body qt` → way objects with node ID arrays + tags
+   * `>`          → expand to all child nodes
+   * `out skel qt`→ node objects with id + lat/lon
+   *
+   * This dual query is what enables block-level splitting:
+   * we know WHICH nodes each way shares with other ways (intersections).
+   */
+  const STREET_Q = `
+[out:json][timeout:180];
 (
-  way["highway"~"^(trunk|primary|secondary|tertiary|residential|unclassified|living_street|service)$"]
+  way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street)$"]
      ["name"]
      (${BBOX});
 );
-out geom qt;`;
+out body qt;
+>;
+out skel qt;
+`;
 
-  const SUBWAY_Q=`
+  const SUBWAY_Q = `
 [out:json][timeout:40];
 relation["route"="subway"](${BBOX});
-out geom;`;
+out geom;
+`;
 
-  ldTxt.textContent='Fetching Brooklyn streets…';
-  ldProg.textContent='First load takes 20–40 s';
+  ltEl.textContent = 'Fetching Brooklyn streets…';
+  lpEl.textContent = 'First load takes 20–40 s — fetching real OSM data';
 
-  const [sR,subR]=await Promise.allSettled([oaFetch(STREET_Q),oaFetch(SUBWAY_Q)]);
+  // Fetch streets + subway in parallel
+  const [streetResult, subwayResult] = await Promise.allSettled([
+    oaFetch(STREET_Q),
+    oaFetch(SUBWAY_Q),
+  ]);
 
-  if(sR.status==='fulfilled'){
-    const ways=sR.value.elements||[];
-    totalWays=ways.length;
-    ldTxt.textContent=`Building ${ways.length.toLocaleString()} streets…`;
-    ldProg.textContent='';
-    const CHUNK=250;
-    for(let i=0;i<ways.length;i+=CHUNK){
-      ways.slice(i,i+CHUNK).forEach(buildStreet);
-      ldProg.textContent=Math.min(i+CHUNK,ways.length).toLocaleString()+' / '+ways.length.toLocaleString();
-      await new Promise(r=>setTimeout(r,0));
+  // ── Build street blocks ───────────────────────────────
+  if (streetResult.status === 'fulfilled') {
+    ltEl.textContent = 'Splitting streets into blocks…';
+    lpEl.textContent = '';
+
+    const blocks = splitIntoBlocks(streetResult.value.elements || []);
+    totalBlocks   = blocks.length;
+
+    ltEl.textContent = `Drawing ${totalBlocks.toLocaleString()} blocks…`;
+
+    // Render in chunks of 200, yielding to browser between each chunk
+    // so the loading screen updates and the UI stays responsive
+    const CHUNK = 200;
+    for (let i = 0; i < blocks.length; i += CHUNK) {
+      blocks.slice(i, i + CHUNK).forEach(buildBlock);
+      lpEl.textContent =
+        Math.min(i + CHUNK, blocks.length).toLocaleString()
+        + ' / ' + blocks.length.toLocaleString();
+      await new Promise(r => setTimeout(r, 0)); // yield
     }
-    ldProg.textContent='';
-  }else{
-    console.error('Streets failed:',sR.reason);
-    ldTxt.textContent='Street data unavailable';
+    lpEl.textContent = '';
+
+  } else {
+    ltEl.textContent = 'Street data unavailable — check console';
+    console.error('Streets failed:', streetResult.reason);
   }
 
-  if(subR.status==='fulfilled')buildSubway(subR.value.elements||[]);
-  else console.warn('Subway unavailable:',subR.reason);
+  // ── Subway lines (drawn above streets, non-interactive) ──
+  if (subwayResult.status === 'fulfilled') {
+    buildSubway(subwayResult.value.elements || []);
+  } else {
+    console.warn('Subway unavailable:', subwayResult.reason);
+  }
 
-  loadBorder();
+  // ── Brooklyn border + outside mask ───────────────────
+  await buildBorderAndMask();
+
+  // ── Apply any painted state already loaded by Gun.js ──
+  flushRefresh();
   updateUI();
-  setSync('','Ready');
-  ldEl.style.opacity='0';
-  setTimeout(()=>{ldEl.style.display='none';},420);
+
+  syncStatus('off', gunConnected ? 'Live · Shared' : 'Connecting…');
+
+  // Fade out loading screen
+  ldEl.style.opacity = '0';
+  setTimeout(() => { ldEl.style.display = 'none'; }, 500);
 }
 
 init();
